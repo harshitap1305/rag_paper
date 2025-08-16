@@ -22,7 +22,7 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Page
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.lib import colors
-from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY
+from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY, TA_LEFT
 import re
 from datetime import datetime
 import numpy as np
@@ -156,101 +156,6 @@ class AdvancedVisualizationGenerator:
             word_freq = Counter(words)
             return [(word, freq/len(words)) for word, freq in word_freq.most_common(max_concepts)
                    if word not in {'this', 'that', 'with', 'from', 'they', 'were', 'been', 'have'}]
-
-    def create_professional_network(self, text_chunks, title="Research Concept Network"):
-        """Create a sophisticated network visualization"""
-        try:
-            concepts = self.extract_key_concepts(text_chunks, max_concepts=15)
-            
-            if len(concepts) < 3:
-                concepts = [('machine learning', 0.8), ('data analysis', 0.7), ('methodology', 0.6),
-                           ('results', 0.5), ('evaluation', 0.4)]
-            
-            # Create network with weighted edges
-            G = nx.Graph()
-            concept_dict = dict(concepts)
-            concept_names = list(concept_dict.keys())
-            
-            # Add nodes with weights
-            for concept, weight in concepts[:12]:
-                G.add_node(concept, weight=weight)
-            
-            # Add edges based on co-occurrence in chunks
-            all_text = " ".join(text_chunks).lower()
-            for i, concept1 in enumerate(concept_names[:12]):
-                for concept2 in concept_names[i+1:12]:
-                    # Calculate co-occurrence strength
-                    concept1_count = all_text.count(concept1)
-                    concept2_count = all_text.count(concept2)
-                    
-                    if concept1_count > 1 and concept2_count > 1:
-                        # Simple co-occurrence in same chunks
-                        co_occurrence = sum(1 for chunk in text_chunks 
-                                          if concept1 in chunk.lower() and concept2 in chunk.lower())
-                        
-                        if co_occurrence > 0:
-                            weight = min(co_occurrence / len(text_chunks), 1.0)
-                            G.add_edge(concept1, concept2, weight=weight)
-            
-            # Create professional visualization
-            fig, ax = plt.subplots(figsize=(16, 12))
-            fig.patch.set_facecolor('white')
-            
-            # Use advanced layout
-            if len(G.nodes()) > 0:
-                pos = nx.spring_layout(G, k=3, iterations=100, seed=42)
-                
-                # Node properties
-                node_sizes = [concept_dict.get(node, 0.1) * 3000 + 500 for node in G.nodes()]
-                node_colors = [concept_dict.get(node, 0.1) for node in G.nodes()]
-                
-                # Draw edges with varying thickness
-                edge_weights = [G[u][v]['weight'] * 5 for u, v in G.edges()]
-                nx.draw_networkx_edges(G, pos, width=edge_weights, alpha=0.6, 
-                                     edge_color='lightgray', style='-')
-                
-                # Draw nodes with professional styling
-                nodes = nx.draw_networkx_nodes(G, pos, 
-                                             node_size=node_sizes,
-                                             node_color=node_colors,
-                                             cmap=plt.cm.viridis,
-                                             alpha=0.8,
-                                             edgecolors='black',
-                                             linewidths=1.5)
-                
-                # Add labels with better positioning
-                label_pos = {}
-                for node, (x, y) in pos.items():
-                    label_pos[node] = (x, y + 0.1)
-                
-                labels = {node: textwrap.fill(node.title(), width=15) for node in G.nodes()}
-                nx.draw_networkx_labels(G, label_pos, labels, font_size=10, 
-                                      font_weight='bold', font_family='sans-serif')
-            
-            # Professional title and styling
-            ax.set_title(title, fontsize=18, fontweight='bold', pad=20,
-                        color=PROFESSIONAL_COLORS['primary'])
-            ax.text(0.5, -0.05, f'Network shows relationships between key concepts\nNode size = concept importance, Edge thickness = co-occurrence strength',
-                   transform=ax.transAxes, ha='center', va='top', fontsize=10,
-                   style='italic', color='gray')
-            
-            ax.axis('off')
-            plt.tight_layout()
-            
-            # Add subtle background
-            ax.set_facecolor('#fafafa')
-            
-            # Save with high quality
-            buf = BytesIO()
-            plt.savefig(buf, format='png', dpi=300, bbox_inches='tight', 
-                       facecolor='white', edgecolor='none')
-            buf.seek(0)
-            plt.close()
-            return buf
-            
-        except Exception as e:
-            st.warning(f"Could not generate concept network: {str(e)}")
-            return None
 
     def create_methodology_flow(self, text_chunks):
         """Create a sophisticated methodology flowchart"""
@@ -535,90 +440,6 @@ class AdvancedVisualizationGenerator:
             st.warning(f"Could not generate results dashboard: {str(e)}")
             return None
 
-    def create_elegant_wordcloud(self, text_chunks, title="Research Keywords"):
-        """Create an elegant, professional word cloud"""
-        try:
-            # Advanced text preprocessing
-            all_text = " ".join(text_chunks)
-            
-            # Remove citations, references, and noise
-            text = re.sub(r'\[.*?\]', '', all_text)  # Remove citations
-            text = re.sub(r'\(.*?\)', '', text)      # Remove parentheses content
-            text = re.sub(r'[^\w\s]', ' ', text.lower())
-            
-            # Enhanced stopwords for academic papers
-            academic_stopwords = {
-                'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by',
-                'this', 'that', 'these', 'those', 'is', 'are', 'was', 'were', 'be', 'been',
-                'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
-                'should', 'may', 'might', 'can', 'must', 'shall', 'also', 'such', 'than',
-                'more', 'most', 'very', 'much', 'many', 'some', 'any', 'each', 'every',
-                'other', 'another', 'same', 'different', 'new', 'old', 'first', 'last',
-                'paper', 'study', 'research', 'work', 'article', 'author', 'authors',
-                'et', 'al', 'fig', 'figure', 'table', 'section', 'shown', 'show', 'shows',
-                'used', 'use', 'using', 'based', 'approach', 'method', 'propose', 'proposed'
-            }
-            
-            # Filter and clean words
-            words = text.split()
-            filtered_words = [word for word in words 
-                            if word not in academic_stopwords 
-                            and len(word) > 3 
-                            and not word.isdigit()]
-            
-            cleaned_text = ' '.join(filtered_words)
-            
-            if len(cleaned_text.strip()) < 50:
-                cleaned_text = "machine learning artificial intelligence data analysis deep learning neural networks algorithm optimization performance evaluation methodology results"
-            
-            # Custom color function for professional appearance
-            def professional_color_func(word, font_size, position, orientation, random_state=None, **kwargs):
-                colors = [PROFESSIONAL_COLORS['primary'], PROFESSIONAL_COLORS['secondary'], 
-                         PROFESSIONAL_COLORS['accent'], PROFESSIONAL_COLORS['info']]
-                return colors[hash(word) % len(colors)]
-            
-            # Generate word cloud with professional settings
-            wordcloud = WordCloud(
-                width=1200, height=600,
-                background_color='white',
-                color_func=professional_color_func,
-                max_words=100,
-                relative_scaling=0.6,
-                font_path=None,  # Use default font
-                prefer_horizontal=0.9,
-                min_font_size=12,
-                max_font_size=100,
-                collocations=False
-            ).generate(cleaned_text)
-            
-            # Create professional visualization
-            fig, ax = plt.subplots(figsize=(16, 10))
-            fig.patch.set_facecolor('white')
-            
-            ax.imshow(wordcloud, interpolation='bilinear')
-            ax.set_title(f'{title}\nKey Terms and Concepts in Research', 
-                        fontsize=18, fontweight='bold', pad=30,
-                        color=PROFESSIONAL_COLORS['primary'])
-            
-            # Add subtle border
-            ax.add_patch(plt.Rectangle((0, 0), wordcloud.width, wordcloud.height, 
-                                     fill=False, edgecolor=PROFESSIONAL_COLORS['primary'], 
-                                     linewidth=3, alpha=0.8))
-            
-            ax.axis('off')
-            plt.tight_layout()
-            
-            buf = BytesIO()
-            plt.savefig(buf, format='png', dpi=300, bbox_inches='tight',
-                       facecolor='white', edgecolor='none')
-            buf.seek(0)
-            plt.close()
-            return buf
-            
-        except Exception as e:
-            st.warning(f"Could not generate word cloud: {str(e)}")
-            return None
-
     def create_research_timeline(self, text_chunks):
         """Create a research timeline/milestone visualization"""
         try:
@@ -844,7 +665,8 @@ class CitationSearcher:
                                   for author in item.get('author', [])[:3]],
                         'journal': item.get('container-title', ['Unknown'])[0] if item.get('container-title') else 'Unknown',
                         'year': item.get('published-print', {}).get('date-parts', [[2023]])[0][0] if item.get('published-print') else 'Unknown',
-                        'doi': item.get('DOI', 'No DOI')
+                        'doi': item.get('DOI', 'No DOI'),
+                        'url': f"https://doi.org/{item.get('DOI')}" if item.get('DOI') else None
                     }
                     papers.append(paper)
                 
@@ -857,7 +679,7 @@ class CitationSearcher:
         return []
 
 class BookletGenerator:
-    """Generates comprehensive PDF booklets"""
+    """Generates comprehensive PDF booklets with improved formatting"""
     
     def __init__(self, title, author="RAG System"):
         self.title = title
@@ -865,21 +687,35 @@ class BookletGenerator:
         self.styles = getSampleStyleSheet()
         self.story = []
         
-        # Custom styles
+        # Enhanced custom styles for better formatting
         self.title_style = ParagraphStyle(
             'CustomTitle',
             parent=self.styles['Title'],
             fontSize=24,
             spaceAfter=30,
-            alignment=TA_CENTER
+            alignment=TA_CENTER,
+            textColor=colors.darkblue,
+            fontName='Helvetica-Bold'
         )
         
         self.heading_style = ParagraphStyle(
             'CustomHeading',
             parent=self.styles['Heading1'],
-            fontSize=18,
-            spaceAfter=20,
-            textColor=colors.darkblue
+            fontSize=16,
+            spaceAfter=18,
+            spaceBefore=20,
+            textColor=colors.darkblue,
+            fontName='Helvetica-Bold'
+        )
+        
+        self.subheading_style = ParagraphStyle(
+            'CustomSubHeading',
+            parent=self.styles['Heading2'],
+            fontSize=14,
+            spaceAfter=12,
+            spaceBefore=16,
+            textColor=colors.darkgreen,
+            fontName='Helvetica-Bold'
         )
         
         self.body_style = ParagraphStyle(
@@ -887,60 +723,172 @@ class BookletGenerator:
             parent=self.styles['Normal'],
             fontSize=11,
             spaceAfter=12,
-            alignment=TA_JUSTIFY
+            alignment=TA_JUSTIFY,
+            leftIndent=0,
+            rightIndent=0,
+            fontName='Helvetica'
+        )
+        
+        self.bullet_style = ParagraphStyle(
+            'CustomBullet',
+            parent=self.styles['Normal'],
+            fontSize=11,
+            spaceAfter=8,
+            leftIndent=20,
+            bulletIndent=10,
+            fontName='Helvetica'
+        )
+        
+        self.citation_style = ParagraphStyle(
+            'CustomCitation',
+            parent=self.styles['Normal'],
+            fontSize=10,
+            spaceAfter=10,
+            leftIndent=15,
+            fontName='Helvetica',
+            textColor=colors.darkgrey
         )
     
     def add_title_page(self):
-        """Add title page"""
+        """Add enhanced title page"""
         self.story.append(Spacer(1, 2*inch))
         self.story.append(Paragraph(self.title, self.title_style))
         self.story.append(Spacer(1, 0.5*inch))
-        self.story.append(Paragraph(f"Generated by: {self.author}", self.styles['Normal']))
-        self.story.append(Paragraph(f"Generated on: {datetime.now().strftime('%B %d, %Y')}", self.styles['Normal']))
+        
+        # Add a horizontal line
+        from reportlab.platypus import HRFlowable
+        self.story.append(HRFlowable(width="80%", thickness=2, color=colors.darkblue))
+        self.story.append(Spacer(1, 0.3*inch))
+        
+        author_style = ParagraphStyle(
+            'AuthorStyle',
+            parent=self.styles['Normal'],
+            fontSize=12,
+            alignment=TA_CENTER,
+            fontName='Helvetica-Bold'
+        )
+        
+        self.story.append(Paragraph(f"Generated by: {self.author}", author_style))
+        self.story.append(Paragraph(f"Generated on: {datetime.now().strftime('%B %d, %Y')}", author_style))
         self.story.append(PageBreak())
     
+    def format_text_with_structure(self, content):
+        """Format text content with proper paragraph structure and bullet points"""
+        # Split content into sections and format appropriately
+        sections = re.split(r'\n\s*\n', content)
+        formatted_sections = []
+        
+        for section in sections:
+            section = section.strip()
+            if not section:
+                continue
+                
+            # Check if section looks like a heading (short, ends with colon, all caps, etc.)
+            if (len(section) < 100 and 
+                (section.endswith(':') or section.isupper() or 
+                 any(marker in section.lower() for marker in ['objective', 'methodology', 'results', 'conclusion', 'introduction']))):
+                formatted_sections.append(Paragraph(section, self.subheading_style))
+            else:
+                # Check for bullet points or numbered lists
+                lines = section.split('\n')
+                has_bullets = any(line.strip().startswith(('-', '•', '*', '1.', '2.', '3.')) for line in lines)
+                
+                if has_bullets:
+                    for line in lines:
+                        line = line.strip()
+                        if line:
+                            if line.startswith(('-', '•', '*')):
+                                # Remove bullet and format as bullet point
+                                line = line[1:].strip()
+                                formatted_sections.append(Paragraph(f"• {line}", self.bullet_style))
+                            elif re.match(r'^\d+\.', line):
+                                # Numbered list
+                                formatted_sections.append(Paragraph(line, self.bullet_style))
+                            else:
+                                formatted_sections.append(Paragraph(line, self.body_style))
+                else:
+                    # Regular paragraph
+                    formatted_sections.append(Paragraph(section, self.body_style))
+            
+            formatted_sections.append(Spacer(1, 6))
+        
+        return formatted_sections
+    
     def add_section(self, title, content):
-        """Add a section with title and content"""
+        """Add a section with enhanced formatting"""
         self.story.append(Paragraph(title, self.heading_style))
-        self.story.append(Paragraph(content, self.body_style))
+        
+        # Format content with proper structure
+        formatted_content = self.format_text_with_structure(content)
+        self.story.extend(formatted_content)
+        
         self.story.append(Spacer(1, 20))
     
     def add_image(self, img_buffer, caption="", width=6*inch):
-        """Add image to booklet"""
+        """Add image to booklet with better formatting"""
         if img_buffer:
             try:
                 img_buffer.seek(0)
                 img = Image(img_buffer, width=width, height=width*0.6)
+                self.story.append(Spacer(1, 10))
                 self.story.append(img)
                 if caption:
-                    self.story.append(Paragraph(f"<i>{caption}</i>", self.styles['Normal']))
-                self.story.append(Spacer(1, 20))
+                    caption_style = ParagraphStyle(
+                        'CaptionStyle',
+                        parent=self.styles['Normal'],
+                        fontSize=10,
+                        alignment=TA_CENTER,
+                        fontName='Helvetica-Oblique',
+                        textColor=colors.darkgrey,
+                        spaceBefore=5,
+                        spaceAfter=15
+                    )
+                    self.story.append(Paragraph(f"Figure: {caption}", caption_style))
+                self.story.append(Spacer(1, 15))
             except Exception as e:
                 st.warning(f"Could not add image to booklet: {str(e)}")
     
     def add_citations(self, citations):
-        """Add citations section"""
+        """Add citations section with clickable links"""
         if citations:
-            self.story.append(Paragraph("Related Research & Citations", self.heading_style))
+            self.story.append(Paragraph("References and Related Research", self.heading_style))
+            self.story.append(Spacer(1, 10))
             
             for i, citation in enumerate(citations, 1):
-                citation_text = f"""
-                <b>{i}. {citation['title']}</b><br/>
-                Authors: {', '.join(citation['authors']) if citation['authors'] else 'Unknown'}<br/>
-                Journal: {citation['journal']}<br/>
-                Year: {citation['year']}<br/>
-                DOI: {citation['doi']}<br/><br/>
-                """
-                self.story.append(Paragraph(citation_text, self.body_style))
+                authors_text = ', '.join(citation['authors']) if citation['authors'] else 'Unknown Authors'
+                
+                # Create citation text with proper formatting
+                citation_parts = [
+                    f"<b>[{i}] {citation['title']}</b>",
+                    f"<i>Authors:</i> {authors_text}",
+                    f"<i>Journal:</i> {citation['journal']}",
+                    f"<i>Year:</i> {citation['year']}"
+                ]
+                
+                # Add DOI link if available
+                if citation['doi'] != 'No DOI' and citation.get('url'):
+                    citation_parts.append(f"<i>DOI:</i> <link href='{citation['url']}'>{citation['doi']}</link>")
+                elif citation['doi'] != 'No DOI':
+                    citation_parts.append(f"<i>DOI:</i> {citation['doi']}")
+                
+                citation_text = "<br/>".join(citation_parts)
+                self.story.append(Paragraph(citation_text, self.citation_style))
+                self.story.append(Spacer(1, 12))
             
             self.story.append(Spacer(1, 20))
     
     def generate_pdf(self):
-        """Generate the final PDF"""
+        """Generate the final PDF with enhanced formatting"""
         try:
             buffer = BytesIO()
-            doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=72, leftMargin=72,
-                                  topMargin=72, bottomMargin=18)
+            doc = SimpleDocTemplate(
+                buffer, 
+                pagesize=A4, 
+                rightMargin=72, 
+                leftMargin=72,
+                topMargin=72, 
+                bottomMargin=72
+            )
             doc.build(self.story)
             buffer.seek(0)
             return buffer
@@ -1006,7 +954,7 @@ def get_current_paper_docs(collection, current_paper_name):
         return []
 
 def generate_comprehensive_analysis(paper_content, question=None, max_length=MAX_RESPONSE_LENGTH):
-    """Generate comprehensive analysis of the research paper"""
+    """Generate comprehensive analysis of the research paper with improved structure"""
     
     if question:
         prompt = f"""
@@ -1014,9 +962,11 @@ def generate_comprehensive_analysis(paper_content, question=None, max_length=MAX
         
         Requirements:
         - Provide a comprehensive response (maximum {max_length} words)
+        - Structure your response with clear headings and subheadings
+        - Use bullet points for key findings or multiple items
         - Include specific details and evidence from the paper
-        - Structure your response clearly with key points
         - Be precise and technical where appropriate
+        - Format the response for easy reading with proper paragraphs
         
         Paper content: {paper_content[:5000]}
         
@@ -1024,16 +974,30 @@ def generate_comprehensive_analysis(paper_content, question=None, max_length=MAX
         """
     else:
         prompt = f"""
-        Analyze this research paper and provide a comprehensive summary covering:
+        Analyze this research paper and provide a comprehensive summary with the following structure:
         
-        1. **Research Objective**: What problem does this paper address?
-        2. **Methodology**: How did the researchers approach the problem?
-        3. **Key Findings**: What are the main results and discoveries?
-        4. **Significance**: Why is this research important?
-        5. **Limitations**: What are the acknowledged limitations?
-        6. **Future Work**: What directions for future research are suggested?
+        RESEARCH OBJECTIVE:
+        What problem does this paper address? What are the main research questions?
         
-        Keep the response detailed but within {max_length} words.
+        METHODOLOGY:
+        How did the researchers approach the problem? What methods and techniques were used?
+        
+        KEY FINDINGS:
+        What are the main results and discoveries? Present these as clear bullet points.
+        
+        SIGNIFICANCE AND CONTRIBUTIONS:
+        Why is this research important? What are the key contributions to the field?
+        
+        LIMITATIONS AND CHALLENGES:
+        What are the acknowledged limitations or challenges faced?
+        
+        FUTURE WORK:
+        What directions for future research are suggested?
+        
+        CONCLUSION:
+        Summarize the overall impact and importance of this work.
+        
+        Keep the response detailed but within {max_length} words. Use proper paragraph structure and bullet points where appropriate.
         
         Paper content: {paper_content[:5000]}
         """
@@ -1074,14 +1038,12 @@ with st.sidebar:
     max_response_length = st.slider("Max Response Length (words)", 500, 5000, MAX_RESPONSE_LENGTH)
     n_results = st.slider("Number of Retrieved Chunks", 3, 15, N_RESULTS)
     include_citations = st.checkbox("Include Citation Search", value=True)
-    include_visualizations = st.checkbox("Include Professional Visualizations", value=True)
+    include_visualizations = st.checkbox("Include Visualizations", value=True)
     
-    # Visualization options
+    # Visualization options (removed concept network and wordcloud)
     st.subheader("📊 Visualization Types")
-    viz_concept_network = st.checkbox("Concept Network", value=True)
     viz_methodology_flow = st.checkbox("Methodology Flowchart", value=True)
     viz_results_dashboard = st.checkbox("Results Dashboard", value=True)
-    viz_wordcloud = st.checkbox("Professional Word Cloud", value=True)
     viz_timeline = st.checkbox("Research Timeline", value=True)
     viz_hierarchy = st.checkbox("Concept Hierarchy", value=True)
     
@@ -1193,7 +1155,7 @@ else:
         generate_full_analysis = st.button("📊 Generate Full Paper Analysis", type="secondary")
 
     with col2:
-        booklet_title = st.text_input("Booklet Title", value=f"Professional Analysis of {st.session_state.current_paper}" if st.session_state.current_paper else "Research Paper Analysis")
+        booklet_title = st.text_input("Booklet Title", value=f"Analysis of {st.session_state.current_paper}" if st.session_state.current_paper else "Research Paper Analysis")
 
     with col3:
         generate_booklet = st.button("📖 Generate Professional Booklet", type="primary")
@@ -1211,58 +1173,36 @@ else:
                 st.write(full_analysis)
                 
                 if generate_booklet:
-                    with st.spinner("Generating professional booklet with advanced visualizations..."):
+                    with st.spinner("Generating professional booklet with visualizations..."):
                         booklet = BookletGenerator(booklet_title)
                         booklet.add_title_page()
                         booklet.add_section("Research Paper Analysis", full_analysis)
                         
                         if include_visualizations:
-                            st.subheader("📊 Professional Visualizations")
+                            st.subheader("📊 Visualizations")
                             viz_docs = all_docs[:15] if len(all_docs) > 15 else all_docs
-                            
-                            # Concept Network
-                            if viz_concept_network:
-                                with st.spinner("Creating professional concept network..."):
-                                    try:
-                                        concept_img = viz_gen.create_professional_network(viz_docs[:10], st.session_state.current_paper)
-                                        if concept_img:
-                                            display_image(concept_img, caption="Professional Concept Network")
-                                            booklet.add_image(concept_img, "Advanced Concept Relationships")
-                                    except Exception as e:
-                                        st.warning(f"Could not create concept network: {str(e)}")
                             
                             # Methodology Flowchart
                             if viz_methodology_flow:
-                                with st.spinner("Creating sophisticated methodology flow..."):
+                                with st.spinner("Creating methodology flow..."):
                                     try:
                                         method_img = viz_gen.create_methodology_flow(viz_docs[:10])
                                         if method_img:
-                                            display_image(method_img, caption="Professional Methodology Flowchart")
-                                            booklet.add_image(method_img, "Advanced Research Methodology Workflow")
+                                            display_image(method_img, caption="Research Methodology Flowchart")
+                                            booklet.add_image(method_img, "Research Methodology Workflow")
                                     except Exception as e:
                                         st.warning(f"Could not create methodology flowchart: {str(e)}")
                             
                             # Results Dashboard
                             if viz_results_dashboard:
-                                with st.spinner("Creating comprehensive results dashboard..."):
+                                with st.spinner("Creating results dashboard..."):
                                     try:
                                         results_img = viz_gen.create_advanced_results_dashboard(viz_docs[:10])
                                         if results_img:
-                                            display_image(results_img, caption="Advanced Results Dashboard")
+                                            display_image(results_img, caption="Results Dashboard")
                                             booklet.add_image(results_img, "Comprehensive Results Analysis Dashboard")
                                     except Exception as e:
                                         st.warning(f"Could not create results dashboard: {str(e)}")
-                            
-                            # Professional Word Cloud
-                            if viz_wordcloud:
-                                with st.spinner("Creating elegant word cloud..."):
-                                    try:
-                                        wordcloud_img = viz_gen.create_elegant_wordcloud(viz_docs, f"Key Terms - {st.session_state.current_paper}")
-                                        if wordcloud_img:
-                                            display_image(wordcloud_img, caption="Professional Keywords Visualization")
-                                            booklet.add_image(wordcloud_img, "Elegant Term Frequency Analysis")
-                                    except Exception as e:
-                                        st.warning(f"Could not create word cloud: {str(e)}")
                             
                             # Research Timeline
                             if viz_timeline:
@@ -1271,7 +1211,7 @@ else:
                                         timeline_img = viz_gen.create_research_timeline(viz_docs[:10])
                                         if timeline_img:
                                             display_image(timeline_img, caption="Research Project Timeline")
-                                            booklet.add_image(timeline_img, "Professional Timeline Visualization")
+                                            booklet.add_image(timeline_img, "Research Timeline Visualization")
                                     except Exception as e:
                                         st.warning(f"Could not create timeline: {str(e)}")
                             
@@ -1282,11 +1222,11 @@ else:
                                         hierarchy_img = viz_gen.create_concept_hierarchy(viz_docs[:15])
                                         if hierarchy_img:
                                             display_image(hierarchy_img, caption="Concept Hierarchy Diagram")
-                                            booklet.add_image(hierarchy_img, "Advanced Concept Structure Analysis")
+                                            booklet.add_image(hierarchy_img, "Concept Structure Analysis")
                                     except Exception as e:
                                         st.warning(f"Could not create concept hierarchy: {str(e)}")
                         
-                        # Search for citations
+                        # Search for citations with links
                         if include_citations:
                             with st.spinner("Searching for related papers..."):
                                 try:
@@ -1296,7 +1236,10 @@ else:
                                         st.subheader("📚 Related Research")
                                         for citation in citations[:5]:
                                             authors_str = ', '.join(citation['authors'][:2]) if citation['authors'] else 'Unknown'
-                                            st.write(f"**{citation['title']}** - {authors_str} ({citation['year']})")
+                                            if citation.get('url'):
+                                                st.write(f"**[{citation['title']}]({citation['url']})** - {authors_str} ({citation['year']})")
+                                            else:
+                                                st.write(f"**{citation['title']}** - {authors_str} ({citation['year']})")
                                         booklet.add_citations(citations)
                                 except Exception as e:
                                     st.warning(f"Could not search for citations: {str(e)}")
@@ -1311,7 +1254,7 @@ else:
                                 st.download_button(
                                     label="📥 Download Professional Research Booklet (PDF)",
                                     data=pdf_buffer,
-                                    file_name=f"{booklet_title.replace(' ', '_')}_professional_booklet.pdf",
+                                    file_name=f"{booklet_title.replace(' ', '_')}_booklet.pdf",
                                     mime="application/pdf",
                                     type="primary"
                                 )
@@ -1326,23 +1269,19 @@ else:
 st.markdown("---")
 st.markdown(
     """
-    **🌟 Enhanced Professional Features:**
+    **🌟 Enhanced Features:**
     - 📚 **Advanced PDF Processing** & Intelligent Indexing
     - 🔍 **Smart Question Answering** with Context Retrieval
     - 🎨 **Professional Visualizations**: 
-        - 🕸️ Sophisticated Concept Networks
         - 📊 Advanced Results Dashboards  
-        - 🔄 Elegant Methodology Flowcharts
-        - ☁️ Professional Word Clouds
+        - 🔄 Methodology Flowcharts
         - 📅 Research Timeline Diagrams
         - 🏗️ Hierarchical Concept Maps
-    - 🔗 **Citation & Related Paper Search**
-    - 📖 **Comprehensive PDF Booklet Generation**
+    - 🔗 **Citation Search with Clickable Links**
+    - 📖 **Professional PDF Booklet Generation** with Enhanced Formatting
     - ⚙️ **Configurable Settings** & Analysis Parameters
     - 🗑️ **Smart Database Management** (Single Paper Focus)
     
-    **🎯 Professional Quality:** All visualizations use advanced algorithms, sophisticated styling, and publication-ready graphics suitable for academic presentations and reports.
-    
-    **📋 Note:** Each PDF upload creates an isolated analysis environment to ensure focused, accurate results.
+    **🎯 Professional Quality:** All visualizations and PDFs are formatted for academic presentations and reports.
     """
 )
