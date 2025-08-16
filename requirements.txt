@@ -1,6 +1,32 @@
+# Your existing libraries (keeping your versions)
 streamlit==1.36.0
 chromadb==0.5.5
 pypdf==5.0.0
 sentence-transformers==3.0.1
 numpy==1.26.4
 google-generativeai==0.4.0
+python-dotenv
+requests
+beautifulsoup4
+matplotlib
+seaborn
+pandas
+wordcloud
+Pillow
+
+# NEW LIBRARIES NEEDED FOR ENHANCED FEATURES:
+
+# For interactive visualizations and charts
+plotly>=5.17.0
+
+# For network graphs and concept mapping
+networkx>=3.1
+
+# For flowcharts and diagrams (requires system graphviz installation)
+graphviz>=0.20.1
+
+# For professional PDF generation
+reportlab>=4.0.4
+
+# Additional utilities (may already be satisfied by existing packages)
+collections-extended>=2.0.2
