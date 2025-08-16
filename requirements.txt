@@ -1,6 +1,6 @@
 # Your existing libraries (keeping your versions)
 streamlit==1.36.0
-chromadb==0.5.5
+chromadb
 pypdf==5.0.0
 sentence-transformers==3.0.1
 numpy==1.26.4
