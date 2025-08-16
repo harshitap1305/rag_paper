@@ -1,4 +1,5 @@
 import os
+import warnings
 import streamlit as st
 from dotenv import load_dotenv
 from pypdf import PdfReader
@@ -30,6 +31,14 @@ from wordcloud import WordCloud
 from collections import Counter
 import tempfile
 import uuid
+
+# Suppress warnings
+warnings.filterwarnings('ignore')
+os.environ['TOKENIZERS_PARALLELISM'] = 'false'
+
+# Set matplotlib backend to avoid display issues
+import matplotlib
+matplotlib.use('Agg')
 
 # Config
 DB_DIR = "./chroma_db"
@@ -463,7 +472,35 @@ def get_embedding_fn_and_client():
         st.error(f"Error initializing embedding function: {str(e)}")
         return None, None
 
-def generate_comprehensive_analysis(paper_content, question=None):
+def clear_collection_and_create_new(client, embedder):
+    """Clear existing collection and create a new one"""
+    try:
+        # Try to delete existing collection
+        try:
+            client.delete_collection(COLLECTION_NAME)
+        except:
+            pass  # Collection might not exist
+        
+        # Create new collection
+        collection = client.create_collection(COLLECTION_NAME, embedding_function=embedder)
+        return collection
+    except Exception as e:
+        st.error(f"Error creating new collection: {str(e)}")
+        return None
+
+def get_current_paper_docs(collection, current_paper_name):
+    """Get documents only from the current paper"""
+    try:
+        # Query with a filter for the current paper
+        all_docs = collection.get(
+            where={"source": current_paper_name}
+        )
+        return all_docs.get("documents", [])
+    except Exception as e:
+        st.error(f"Error retrieving current paper documents: {str(e)}")
+        return []
+
+def generate_comprehensive_analysis(paper_content, question=None, max_length=MAX_RESPONSE_LENGTH):
     """Generate comprehensive analysis of the research paper"""
     
     if question:
@@ -471,7 +508,7 @@ def generate_comprehensive_analysis(paper_content, question=None):
         Based on the research paper content below, provide a detailed answer to the question: "{question}"
         
         Requirements:
-        - Provide a comprehensive response (maximum {MAX_RESPONSE_LENGTH} words)
+        - Provide a comprehensive response (maximum {max_length} words)
         - Include specific details and evidence from the paper
         - Structure your response clearly with key points
         - Be precise and technical where appropriate
@@ -491,7 +528,7 @@ def generate_comprehensive_analysis(paper_content, question=None):
         5. **Limitations**: What are the acknowledged limitations?
         6. **Future Work**: What directions for future research are suggested?
         
-        Keep the response detailed but within {MAX_RESPONSE_LENGTH} words.
+        Keep the response detailed but within {max_length} words.
         
         Paper content: {paper_content[:5000]}
         """
@@ -509,24 +546,18 @@ st.set_page_config(page_title="Enhanced RAG with Booklet Generation",
 st.title("🧠 Enhanced RAG — Research Paper Analysis & Booklet Generation")
 st.markdown("Upload research papers, ask questions, and generate comprehensive booklets with visualizations!")
 
+# Initialize session state for current paper tracking
+if 'current_paper' not in st.session_state:
+    st.session_state.current_paper = None
+if 'paper_indexed' not in st.session_state:
+    st.session_state.paper_indexed = False
+
 # Initialize components
 embedder, client = get_embedding_fn_and_client()
 
 if embedder is None or client is None:
     st.error("Failed to initialize embedding function or client. Please check your setup.")
     st.stop()
-
-try:
-    collection = client.get_collection(COLLECTION_NAME, embedding_function=embedder)
-except:
-    try:
-        collection = client.create_collection(COLLECTION_NAME, embedding_function=embedder)
-    except Exception as e:
-        st.error(f"Failed to create collection: {str(e)}")
-        st.stop()
-
-viz_gen = VisualizationGenerator()
-citation_searcher = CitationSearcher()
 
 # Sidebar for settings
 with st.sidebar:
@@ -535,6 +566,24 @@ with st.sidebar:
     n_results = st.slider("Number of Retrieved Chunks", 3, 15, N_RESULTS)
     include_citations = st.checkbox("Include Citation Search", value=True)
     include_visualizations = st.checkbox("Include Visualizations", value=True)
+    
+    # Current paper info
+    st.header("Current Paper")
+    if st.session_state.current_paper:
+        st.success(f"📄 {st.session_state.current_paper}")
+    else:
+        st.info("No paper loaded")
+    
+    # Clear database button
+    if st.button("🗑️ Clear Database", type="secondary"):
+        try:
+            client.delete_collection(COLLECTION_NAME)
+            st.session_state.current_paper = None
+            st.session_state.paper_indexed = False
+            st.success("Database cleared!")
+            st.rerun()
+        except:
+            st.info("Database was already empty")
 
 # Main content
 col1, col2 = st.columns([1, 1])
@@ -544,6 +593,10 @@ with col1:
     uploaded = st.file_uploader("Upload PDF", type=["pdf"])
     
     if uploaded:
+        # Check if this is a new paper
+        if st.session_state.current_paper != uploaded.name:
+            st.session_state.paper_indexed = False
+        
         save_path = os.path.join("uploads", uploaded.name)
         os.makedirs("uploads", exist_ok=True)
         with open(save_path, "wb") as f:
@@ -551,164 +604,212 @@ with col1:
 
         if st.button("📚 Index PDF", type="primary"):
             with st.spinner("Processing PDF..."):
-                raw_text = extract_text_from_pdf(save_path)
-                if raw_text:
-                    chunks = chunk_text(raw_text)
-                    if chunks:
-                        ids = [f"{uploaded.name}-{i}" for i in range(len(chunks))]
-                        metas = [{"source": uploaded.name, "chunk": i} for i in range(len(chunks))]
-                        try:
-                            collection.add(documents=chunks, metadatas=metas, ids=ids)
-                            st.success(f"✅ Indexed {len(chunks)} chunks from {uploaded.name}")
-                        except Exception as e:
-                            st.error(f"Error indexing PDF: {str(e)}")
+                # Clear existing collection and create new one for this paper
+                collection = clear_collection_and_create_new(client, embedder)
+                
+                if collection is not None:
+                    raw_text = extract_text_from_pdf(save_path)
+                    if raw_text:
+                        chunks = chunk_text(raw_text)
+                        if chunks:
+                            ids = [f"{uploaded.name}-{i}" for i in range(len(chunks))]
+                            metas = [{"source": uploaded.name, "chunk": i} for i in range(len(chunks))]
+                            try:
+                                collection.add(documents=chunks, metadatas=metas, ids=ids)
+                                st.session_state.current_paper = uploaded.name
+                                st.session_state.paper_indexed = True
+                                st.success(f"✅ Indexed {len(chunks)} chunks from {uploaded.name}")
+                                st.success(f"🔄 Database cleared and loaded with current paper only")
+                            except Exception as e:
+                                st.error(f"Error indexing PDF: {str(e)}")
+                        else:
+                            st.error("No text chunks extracted from PDF")
                     else:
-                        st.error("No text chunks extracted from PDF")
-                else:
-                    st.error("No text extracted from PDF")
+                        st.error("No text extracted from PDF")
 
 with col2:
     st.header("❓ 2. Ask Questions")
-    question = st.text_area("Your question:", height=100, 
-                           placeholder="Ask about the research methodology, results, or any specific aspect...")
     
-    if st.button("🔍 Analyze & Answer", type="primary") and question.strip():
-        with st.spinner("Retrieving relevant content..."):
+    if not st.session_state.paper_indexed:
+        st.info("Please upload and index a PDF first")
+    else:
+        question = st.text_area("Your question:", height=100, 
+                               placeholder="Ask about the research methodology, results, or any specific aspect...")
+        
+        if st.button("🔍 Analyze & Answer", type="primary") and question.strip():
             try:
-                # Retrieve relevant chunks
-                res = collection.query(query_texts=[question], n_results=n_results)
-                docs = res.get("documents", [[]])[0]
+                collection = client.get_collection(COLLECTION_NAME, embedding_function=embedder)
                 
-                if not docs:
-                    st.warning("No relevant content found.")
-                else:
-                    context = "\n".join(docs)
+                with st.spinner("Retrieving relevant content..."):
+                    # Retrieve relevant chunks from current paper only
+                    res = collection.query(
+                        query_texts=[question], 
+                        n_results=n_results,
+                        where={"source": st.session_state.current_paper}
+                    )
+                    docs = res.get("documents", [[]])[0]
                     
-                    # Generate comprehensive response
-                    with st.spinner("Generating comprehensive analysis..."):
-                        analysis = generate_comprehensive_analysis(context, question)
-                    
-                    st.subheader("📝 Analysis & Answer")
-                    st.write(analysis)
-                    
-                    # Display retrieved passages
-                    with st.expander("📖 Retrieved Passages", expanded=False):
-                        for i, doc in enumerate(docs, 1):
-                            st.write(f"**Passage {i}:** {doc[:500]}...")
+                    if not docs:
+                        st.warning("No relevant content found in the current paper.")
+                    else:
+                        context = "\n".join(docs)
+                        
+                        # Generate comprehensive response
+                        with st.spinner("Generating comprehensive analysis..."):
+                            analysis = generate_comprehensive_analysis(context, question, max_response_length)
+                        
+                        st.subheader("📝 Analysis & Answer")
+                        st.write(analysis)
+                        
+                        # Display retrieved passages
+                        with st.expander("📖 Retrieved Passages", expanded=False):
+                            for i, doc in enumerate(docs, 1):
+                                st.write(f"**Passage {i}:** {doc[:500]}...")
             except Exception as e:
                 st.error(f"Error during query: {str(e)}")
 
 # Generate Booklet Section
 st.header("📖 3. Generate Research Booklet")
 
-col1, col2, col3 = st.columns([1, 1, 1])
+if not st.session_state.paper_indexed:
+    st.info("Please upload and index a PDF first")
+else:
+    col1, col2, col3 = st.columns([1, 1, 1])
 
-with col1:
-    generate_full_analysis = st.button("📊 Generate Full Paper Analysis", type="secondary")
+    with col1:
+        generate_full_analysis = st.button("📊 Generate Full Paper Analysis", type="secondary")
 
-with col2:
-    booklet_title = st.text_input("Booklet Title", value="Research Paper Analysis")
+    with col2:
+        booklet_title = st.text_input("Booklet Title", value=f"Analysis of {st.session_state.current_paper}" if st.session_state.current_paper else "Research Paper Analysis")
 
-with col3:
-    generate_booklet = st.button("📖 Generate Complete Booklet", type="primary")
+    with col3:
+        generate_booklet = st.button("📖 Generate Complete Booklet", type="primary")
 
-if generate_full_analysis or generate_booklet:
-    try:
-        # Get all documents for comprehensive analysis
-        all_res = collection.query(query_texts=["research methodology results findings"], n_results=20)
-        all_docs = all_res.get("documents", [[]])[0]
-        
-        if all_docs:
-            with st.spinner("Generating comprehensive analysis..."):
-                full_analysis = generate_comprehensive_analysis("\n".join(all_docs))
+    if generate_full_analysis or generate_booklet:
+        try:
+            collection = client.get_collection(COLLECTION_NAME, embedding_function=embedder)
             
-            st.subheader("📊 Complete Paper Analysis")
-            st.write(full_analysis)
+            # Get documents from current paper only
+            all_docs = get_current_paper_docs(collection, st.session_state.current_paper)
             
-            if generate_booklet:
-                with st.spinner("Generating booklet with visualizations..."):
-                    # Initialize booklet generator
-                    booklet = BookletGenerator(booklet_title)
-                    booklet.add_title_page()
-                    
-                    # Add main analysis
-                    booklet.add_section("Research Paper Analysis", full_analysis)
-                    
-                    # Generate and add visualizations
-                    if include_visualizations:
-                        st.subheader("📊 Generated Visualizations")
+            if all_docs:
+                with st.spinner("Generating comprehensive analysis..."):
+                    full_analysis = generate_comprehensive_analysis("\n".join(all_docs), max_length=max_response_length)
+                
+                st.subheader(f"📊 Complete Analysis of {st.session_state.current_paper}")
+                st.write(full_analysis)
+                
+                if generate_booklet:
+                    with st.spinner("Generating booklet with visualizations..."):
+                        # Initialize booklet generator
+                        booklet = BookletGenerator(booklet_title)
+                        booklet.add_title_page()
                         
-                        # Concept Network
-                        with st.spinner("Creating concept network..."):
-                            concept_img = viz_gen.create_concept_network(all_docs[:10])
-                            if concept_img:
-                                display_image(concept_img, caption="Concept Network")
-                                booklet.add_image(concept_img, "Key Concepts and Their Relationships")
+                        # Add main analysis
+                        booklet.add_section("Research Paper Analysis", full_analysis)
                         
-                        # Methodology Flowchart
-                        with st.spinner("Creating methodology flowchart..."):
-                            method_img = viz_gen.create_methodology_flowchart(all_docs[:10])
-                            if method_img:
-                                display_image(method_img, caption="Methodology Flowchart")
-                                booklet.add_image(method_img, "Research Methodology Flow")
-                        
-                        # Results Visualization
-                        with st.spinner("Creating results visualization..."):
-                            results_img = viz_gen.create_results_visualization(all_docs[:10])
-                            if results_img:
-                                display_image(results_img, caption="Results Analysis")
-                                booklet.add_image(results_img, "Statistical Analysis of Results")
-                        
-                        # Word Cloud
-                        with st.spinner("Creating word cloud..."):
-                            wordcloud_img = viz_gen.create_word_cloud(all_docs[:15])
-                            if wordcloud_img:
-                                display_image(wordcloud_img, caption="Key Terms Word Cloud")
-                                booklet.add_image(wordcloud_img, "Most Important Terms in the Research")
-                    
-                    # Search for citations
-                    if include_citations:
-                        with st.spinner("Searching for related papers..."):
-                            citations = citation_searcher.search_related_papers(booklet_title, limit=8)
-                            if citations:
-                                st.subheader("📚 Related Research")
-                                for citation in citations[:5]:
-                                    authors_str = ', '.join(citation['authors'][:2]) if citation['authors'] else 'Unknown'
-                                    st.write(f"**{citation['title']}** - {authors_str} ({citation['year']})")
-                                booklet.add_citations(citations)
-                    
-                    # Generate final PDF
-                    with st.spinner("Generating PDF booklet..."):
-                        pdf_buffer = booklet.generate_pdf()
-                        
-                        if pdf_buffer:
-                            st.success("✅ Booklet generated successfully!")
+                        # Generate and add visualizations
+                        if include_visualizations and viz_gen is not None:
+                            st.subheader("📊 Generated Visualizations")
                             
-                            # Download button
-                            st.download_button(
-                                label="📥 Download Research Booklet (PDF)",
-                                data=pdf_buffer,
-                                file_name=f"{booklet_title.replace(' ', '_')}_booklet.pdf",
-                                mime="application/pdf",
-                                type="primary"
-                            )
-                        else:
-                            st.error("Failed to generate PDF booklet")
-        else:
-            st.warning("No documents found. Please upload and index a PDF first.")
-    except Exception as e:
-        st.error(f"Error during booklet generation: {str(e)}")
+                            # Use only current paper's documents for visualizations
+                            viz_docs = all_docs[:15] if len(all_docs) > 15 else all_docs
+                            
+                            # Concept Network
+                            with st.spinner("Creating concept network..."):
+                                try:
+                                    concept_img = viz_gen.create_concept_network(viz_docs[:10], st.session_state.current_paper)
+                                    if concept_img:
+                                        display_image(concept_img, caption="Concept Network")
+                                        booklet.add_image(concept_img, "Key Concepts and Their Relationships")
+                                except Exception as e:
+                                    st.warning(f"Could not create concept network: {str(e)}")
+                            
+                            # Methodology Flowchart
+                            with st.spinner("Creating methodology flowchart..."):
+                                try:
+                                    method_img = viz_gen.create_methodology_flowchart(viz_docs[:10])
+                                    if method_img:
+                                        display_image(method_img, caption="Methodology Flowchart")
+                                        booklet.add_image(method_img, "Research Methodology Flow")
+                                except Exception as e:
+                                    st.warning(f"Could not create methodology flowchart: {str(e)}")
+                            
+                            # Results Visualization
+                            with st.spinner("Creating results visualization..."):
+                                try:
+                                    results_img = viz_gen.create_results_visualization(viz_docs[:10])
+                                    if results_img:
+                                        display_image(results_img, caption="Results Analysis")
+                                        booklet.add_image(results_img, "Statistical Analysis of Results")
+                                except Exception as e:
+                                    st.warning(f"Could not create results visualization: {str(e)}")
+                            
+                            # Word Cloud
+                            with st.spinner("Creating word cloud..."):
+                                try:
+                                    wordcloud_img = viz_gen.create_word_cloud(viz_docs, f"Key Terms - {st.session_state.current_paper}")
+                                    if wordcloud_img:
+                                        display_image(wordcloud_img, caption="Key Terms Word Cloud")
+                                        booklet.add_image(wordcloud_img, "Most Important Terms in the Research")
+                                except Exception as e:
+                                    st.warning(f"Could not create word cloud: {str(e)}")
+                        elif include_visualizations:
+                            st.warning("Visualization generator not available. Skipping visualizations.")
+                        
+                        # Search for citations
+                        if include_citations and citation_searcher is not None:
+                            with st.spinner("Searching for related papers..."):
+                                try:
+                                    # Use current paper name for citation search
+                                    search_query = booklet_title if booklet_title else st.session_state.current_paper
+                                    citations = citation_searcher.search_related_papers(search_query, limit=8)
+                                    if citations:
+                                        st.subheader("📚 Related Research")
+                                        for citation in citations[:5]:
+                                            authors_str = ', '.join(citation['authors'][:2]) if citation['authors'] else 'Unknown'
+                                            st.write(f"**{citation['title']}** - {authors_str} ({citation['year']})")
+                                        booklet.add_citations(citations)
+                                except Exception as e:
+                                    st.warning(f"Could not search for citations: {str(e)}")
+                        elif include_citations:
+                            st.warning("Citation searcher not available. Skipping citation search.")
+                        
+                        # Generate final PDF
+                        with st.spinner("Generating PDF booklet..."):
+                            pdf_buffer = booklet.generate_pdf()
+                            
+                            if pdf_buffer:
+                                st.success("✅ Booklet generated successfully!")
+                                
+                                # Download button
+                                st.download_button(
+                                    label="📥 Download Research Booklet (PDF)",
+                                    data=pdf_buffer,
+                                    file_name=f"{booklet_title.replace(' ', '_')}_booklet.pdf",
+                                    mime="application/pdf",
+                                    type="primary"
+                                )
+                            else:
+                                st.error("Failed to generate PDF booklet")
+            else:
+                st.warning(f"No documents found for {st.session_state.current_paper}. Please reindex the PDF.")
+        except Exception as e:
+            st.error(f"Error during booklet generation: {str(e)}")
 
 # Footer
 st.markdown("---")
 st.markdown(
     """
     **Features:**
-    - 📚 PDF Processing & Indexing
+    - 📚 PDF Processing & Indexing (Single Paper Mode)
     - 🔍 Intelligent Question Answering  
     - 📊 Automatic Visualizations (Networks, Flowcharts, Statistics)
     - 🔗 Citation & Related Paper Search
     - 📖 Comprehensive PDF Booklet Generation
     - ⚙️ Configurable Response Length & Retrieval
+    - 🗑️ Database Management (Clear & Reset)
+    
+    **Note:** Each new PDF upload clears the database and loads only the current paper to ensure isolated analysis.
     """
 )

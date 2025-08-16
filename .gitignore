@@ -10,7 +10,7 @@ __pycache__/
 
 # Environment variables
 .env
-
+.uploads/
 # SQLite / DB files (if they are generated, not hand-written)
 *.sqlite3
 *.db
